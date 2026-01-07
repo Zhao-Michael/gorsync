@@ -227,11 +227,11 @@ func Main(ctx context.Context, osenv *rsyncos.Env, args []string, cfg *rsyncdcon
 		version(osenv)
 		osenv.Logf("environment: not namespace due to dont_namespace option")
 	} else {
-		if err := namespace(osenv, cfg.Modules, listenAddr); err == errIsParent {
-			return nil, nil
-		} else if err != nil {
-			return nil, fmt.Errorf("namespace: %v", err)
-		}
+		// if err := namespace(osenv, cfg.Modules, listenAddr); err == errIsParent {
+		// 	return nil, nil
+		// } else if err != nil {
+		// 	return nil, fmt.Errorf("namespace: %v", err)
+		// }
 	}
 	osenv.Logf("%d rsync modules configured in total", len(cfg.Modules))
 	for _, mod := range cfg.Modules {
