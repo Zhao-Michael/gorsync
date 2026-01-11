@@ -216,6 +216,7 @@ func Main(ctx context.Context, osenv *rsyncos.Env, args []string, cfg *rsyncdcon
 		module := rsyncd.Module{
 			Name: parts[0],
 			Path: parts[1],
+                        Writable: true,
 		}
 		cfg.Modules = append(cfg.Modules, module)
 	}
