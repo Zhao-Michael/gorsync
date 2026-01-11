@@ -35,6 +35,9 @@ func (rt *Transfer) RecvFiles(fileList []*File) error {
 		if rt.Opts.DebugGTE(rsyncopts.DEBUG_RECV, 1) {
 			rt.Logger.Printf("receiving file idx=%d: %+v", idx, fileList[idx])
 		}
+		if rt.Opts.Progress {
+			fmt.Fprintln(rt.Env.Stdout, fileList[idx].Name)
+		}
 		if err := rt.recvFile1(fileList[idx]); err != nil {
 			return err
 		}
@@ -94,17 +97,17 @@ func (rt *Transfer) openLocalFile(f *File) (*os.File, error) {
 
 // rsync/receiver.c:receive_data
 func (rt *Transfer) receiveData(f *File, localFile *os.File) error {
+	rt.Progress.Reset(uint64(f.Length))
 	var sh rsync.SumHead
 	if err := sh.ReadFrom(rt.Conn); err != nil {
 		return err
 	}
 
-	local := filepath.Join(rt.Dest, f.Name)
-	// TODO: use rt.DestRoot once renameio supports it
 	if rt.Opts.DebugGTE(rsyncopts.DEBUG_DELTASUM, 1) {
+		local := filepath.Join(rt.Dest, f.Name)
 		rt.Logger.Printf("creating %s", local)
 	}
-	out, err := newPendingFile(local)
+	out, err := newPendingFile(rt.DestRoot, f.Name)
 	if err != nil {
 		return err
 	}
@@ -115,6 +118,7 @@ func (rt *Transfer) receiveData(f *File, localFile *os.File) error {
 
 	wr := io.MultiWriter(out, h)
 
+	offset := 0
 	for {
 		token, data, err := rt.recvToken()
 		if err != nil {
@@ -123,14 +127,24 @@ func (rt *Transfer) receiveData(f *File, localFile *os.File) error {
 		if token == 0 {
 			break
 		}
+		if rt.Opts.Progress && !rt.Opts.Server {
+			rt.Progress.MaybeShow(uint64(offset), false)
+			if offset == 0 {
+				defer func() {
+					rt.Progress.MaybeShow(uint64(offset), true)
+				}()
+			}
+		}
 		if token > 0 {
-			if _, err := wr.Write(data); err != nil {
+			n, err := wr.Write(data)
+			if err != nil {
 				return err
 			}
+			offset += n
 			continue
 		}
 		if localFile == nil {
-			return fmt.Errorf("BUG: local file %s not open for copying chunk", local)
+			return fmt.Errorf("BUG: local file %s not open for copying chunk", out.Name())
 		}
 		token = -(token + 1)
 		offset2 := int64(token) * int64(sh.BlockLength)
@@ -143,9 +157,11 @@ func (rt *Transfer) receiveData(f *File, localFile *os.File) error {
 			return err
 		}
 
-		if _, err := wr.Write(data); err != nil {
+		n, err := wr.Write(data)
+		if err != nil {
 			return err
 		}
+		offset += n
 	}
 	localSum := h.Sum(nil)
 	remoteSum := make([]byte, len(localSum))
