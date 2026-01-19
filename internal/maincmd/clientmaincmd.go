@@ -91,7 +91,7 @@ func rsyncMain(ctx context.Context, osenv *rsyncos.Env, opts *rsyncopts.Options,
 	paths := []string{other}
 	if opts.Sender() {
 		// source is local
-		other = src
+		// other = src
 		paths = sources
 		roDirs = sources
 		if opts.LocalServer() {
@@ -103,22 +103,9 @@ func rsyncMain(ctx context.Context, osenv *rsyncos.Env, opts *rsyncopts.Options,
 			rwDirs = paths
 		}
 	}
-	if osenv.Restrict() {
-		if err := restrict.MaybeFileSystem(roDirs, rwDirs); err != nil {
-			return nil, err
-		}
-	}
-
-	module := path
-	if idx := strings.IndexByte(module, '/'); idx > -1 {
-		module = module[:idx]
-	}
-	if opts.Verbose() {
-		osenv.Logf("module=%q, path=%q, other=%q", module, path, other)
-	}
 
 	if daemonConnection < 0 {
-		stats, err := socketClient(ctx, osenv, opts, host, path, port, paths)
+		stats, err := socketClient(ctx, osenv, opts, host, path, port, paths, roDirs, rwDirs)
 		if err != nil {
 			return nil, err
 		}
@@ -141,9 +128,16 @@ func rsyncMain(ctx context.Context, osenv *rsyncos.Env, opts *rsyncopts.Options,
 		r: rc,
 		w: wc,
 	}
+
+	if osenv.Restrict() {
+		if err := restrict.MaybeFileSystem(roDirs, rwDirs); err != nil {
+			return nil, err
+		}
+	}
+
 	negotiate := true
 	if daemonConnection != 0 {
-		done, err := startInbandExchange(osenv, opts, conn, module, path)
+		done, err := StartInbandExchange(osenv, opts, conn, path)
 		if err != nil {
 			return nil, err
 		}
@@ -359,6 +353,7 @@ func ClientRun(osenv *rsyncos.Env, opts *rsyncopts.Options, conn io.ReadWriter, 
 			PreserveTimes:     opts.PreserveMTimes(),
 			PreserveHardlinks: opts.PreserveHardLinks(),
 			IgnoreTimes:       opts.IgnoreTimes(),
+			AlwaysChecksum:    opts.AlwaysChecksum(),
 
 			InfoGTE:  opts.InfoGTE,
 			DebugGTE: opts.DebugGTE,

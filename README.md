@@ -151,8 +151,9 @@ because it requires a config file to be present on the server in
 `~/.config/gokr-rsyncd.toml`.
 
 Note that this mode of operation is only implemented by the original “trigde”
-rsync, not in openrsync. Apple started shipping openrsync with macOS 15 Sequoia,
-so you might need to explicitly start /usr/libexec/rsync/rsync.samba on Macs.
+rsync, not in openrsync. Apple started shipping openrsync with macOS 15 Sequoia.
+For a while, `/usr/libexec/rsync/rsync.samba` was still available, but on more
+recent macOS versions you need to use homebrew or Nix to get tridge rsync.
 
 Example:
 * Server will be started via SSH
@@ -178,21 +179,25 @@ recent choices.
 Supported environments:
 
 1. systemd (Linux)
-1. Docker (Linux)
-1. privileged Linux
+1. privileged Linux (running as `root`, or in a user namespace)
 1. privileged non-Linux
+1. unprivileged Linux, Mac or Windows
 
 In all environments, the default instructions will take care that:
 
-* (On Linux only) Only configured rsync modules from the host file system are
-  mounted **read-only** into a Linux mount namespace for `gokr-rsync`, to guard
-  against data modification and data exfiltration.
+* `gokr-rsync` uses Go’s [Traversal-resistant `os.Root` file
+  APIs](https://go.dev/blog/osroot) to restrict all file access to the specified
+  paths.
+* (On privileged Linux only) Only configured rsync modules from the host file
+  system are mounted (**read-only**, unless the module is `writable`) into a
+  Linux mount namespace for `gokr-rsync`, to guard against data modification and
+  data exfiltration.
 * (On Linux only) File system access is restricted using the
   [Landlock](https://docs.kernel.org/userspace-api/landlock.html) Linux kernel
   security module, which works similar to OpenBSD’s
   [`unveil(2)`](https://man.openbsd.org/unveil.2) API.
-* `gokr-rsync` is running without privileges, as user `nobody`, to limit the
-  scope of what an attacker can do when exploiting a vulnerability.
+* (On privileged environments) `gokr-rsync` drops privileges to user `nobody`,
+  to limit the scope of what an attacker can do when exploiting a vulnerability.
 
 Known gaps:
 
@@ -233,7 +238,7 @@ Additional hardening recommendations:
 
 * Restrict which IP addresses are allowed to connect to your rsync server, for example:
   * using iptables or nftables on your host system
-  * using [`gokr-rsync`’s built-in IP allow/deny mechanism](https://github.com/gokrazy/rsync/issues/4) (once implemented)
+  * using [`gokr-rsync`’s built-in IP allow/deny mechanism](https://github.com/gokrazy/rsync/commit/322543c7c9ee5f9b2128b6f7ccc931d05ae21df1)
   * using [systemd’s `IPAddressDeny` and `IPAddressAllow`](https://manpages.debian.org/systemd.resource-control.5) in `gokr-rsyncd.socket`
 * To reduce the impact of Denial Of Service attacks, you can restrict resources
   with systemd, see [Managing
@@ -246,27 +251,6 @@ Additional hardening recommendations:
   services](https://www.sherbers.de/use-temporaryfilesystem-to-hide-files-or-directories-from-systemd-services/). Note
   that you [may need to disable `ProtectSystem=strict` due to a
   bug](https://github.com/systemd/systemd/issues/18999).
-
-### Docker (unprivileged)
-
-We provide [a `Dockerfile` for
-`gokr-rsyncd`](https://github.com/gokrazy/rsync/tree/main/docker/).
-
-```shell
-docker run \
-  --read-only \
-  -p 127.0.0.1:8730:8730 \
-  -v /etc/tmpfiles.d:/srv/rsync:ro \
-  stapelberg/gokrazy-rsync:latest \
-    --gokr.modulemap=pwd=/srv/rsync
-```
-
-Additional hardening recommendations:
-
-* Restrict which IP addresses are allowed to connect to your rsync server, for example:
-  * using iptables or nftables on your host system
-  * using [`gokr-rsync`’s built-in IP allow/deny mechanism](https://github.com/gokrazy/rsync/issues/4) (once implemented)
-    * Be sure to set up Docker such that the remote IPv4 or IPv6 address is available inside the container, see https://michael.stapelberg.ch/posts/2018-12-12-docker-ipv6/
 
 ### privileged Linux (including gokrazy.org)
 
@@ -283,7 +267,7 @@ Additional hardening recommendations:
 
 * Restrict which IP addresses are allowed to connect to your rsync server, for example:
   * using iptables or nftables on your host system
-  * using [`gokr-rsync`’s built-in IP allow/deny mechanism](https://github.com/gokrazy/rsync/issues/4) (once implemented)
+  * using [`gokr-rsync`’s built-in IP allow/deny mechanism](https://github.com/gokrazy/rsync/commit/322543c7c9ee5f9b2128b6f7ccc931d05ae21df1)
 
 ### privileged non-Linux (e.g. Mac)
 

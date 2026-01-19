@@ -27,6 +27,7 @@ type TransferOpts struct {
 	PreserveTimes     bool
 	PreserveHardlinks bool
 	IgnoreTimes       bool
+	AlwaysChecksum    bool
 
 	InfoGTE  func(rsyncopts.InfoLevel, uint16) bool
 	DebugGTE func(rsyncopts.DebugLevel, uint16) bool
@@ -42,11 +43,12 @@ type Transfer struct {
 	Progress progress.Printer
 
 	// state
-	Conn     *rsyncwire.Conn
-	Seed     int32
-	IOErrors int32
-	Users    map[int32]mapping
-	Groups   map[int32]mapping
+	Conn            *rsyncwire.Conn
+	Seed            int32
+	IOErrors        int32
+	Users           map[int32]mapping
+	Groups          map[int32]mapping
+	retouchDirPerms bool
 }
 
 func (rt *Transfer) listOnly() bool { return rt.Dest == "" }

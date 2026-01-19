@@ -1,11 +1,13 @@
 package receiver
 
 import (
+	"bytes"
 	"fmt"
 	"io"
 	"io/fs"
 	"os"
 	"path/filepath"
+	"syscall"
 	"time"
 
 	"github.com/gokrazy/rsync"
@@ -18,9 +20,6 @@ import (
 func (rt *Transfer) GenerateFiles(fileList []*File) error {
 	phase := 0
 	for idx, f := range fileList {
-		// TODO: use a copy of f with .Mode |= S_IWUSR for directories, so
-		// that we can create files within all directories.
-
 		if err := rt.recvGenerator(idx, f); err != nil {
 			return err
 		}
@@ -42,8 +41,34 @@ func (rt *Transfer) GenerateFiles(fileList []*File) error {
 		return err
 	}
 
+	// NOTE: touchUpDirs is called from [Transfer.Do]
+	// so that both goroutines (generator and receiver)
+	// have finished before we set final permissions.
+
 	if rt.Opts.DebugGTE(rsyncopts.DEBUG_GENR, 1) {
 		rt.Logger.Printf("generateFiles finished")
+	}
+	return nil
+}
+
+func (rt *Transfer) touchUpDirs(fileList []*File) error {
+	for idx, f := range fileList {
+		if rt.Opts.DebugGTE(rsyncopts.DEBUG_TIME, 2) {
+			rt.Logger.Printf("touchUpDirs: %s (%d)", f.Name, idx)
+		}
+		mode := fs.FileMode(f.Mode)
+		if mode&rsync.S_IFMT != rsync.S_IFDIR {
+			continue // not a directory
+		}
+		if rt.Opts.DryRun {
+			continue
+		}
+		if mode&syscall.S_IWUSR > 0 {
+			continue // directory is writeable, no touchup needed
+		}
+		if err := rt.setPerms(f, mode); err != nil {
+			return err
+		}
 	}
 	return nil
 }
@@ -54,7 +79,13 @@ func (rt *Transfer) skipFile(f *File, st os.FileInfo) (bool, error) {
 		return false, nil
 	}
 
-	// TODO: always checksum flag
+	if rt.Opts.AlwaysChecksum {
+		checksum, err := rsyncchecksum.RootChecksum(rt.DestRoot, f.Name)
+		if err != nil {
+			return false, err
+		}
+		return bytes.Equal(f.Checksum[:], checksum[:]), nil
+	}
 
 	// TODO: size only
 
@@ -72,7 +103,7 @@ func modTimeEqual(a, b time.Time) bool {
 }
 
 // rsync/rsync.c:set_perms
-func (rt *Transfer) setPerms(f *File) error {
+func (rt *Transfer) setPerms(f *File, mode fs.FileMode) error {
 	if rt.Opts.DryRun {
 		return nil
 	}
@@ -82,8 +113,8 @@ func (rt *Transfer) setPerms(f *File) error {
 		return err
 	}
 
-	perm := fs.FileMode(f.Mode) & os.ModePerm
-	mode := f.Mode & rsync.S_IFMT
+	perm := mode & os.ModePerm
+	mode = mode & rsync.S_IFMT
 	if rt.Opts.PreserveTimes &&
 		mode != rsync.S_IFLNK &&
 		!modTimeEqual(st.ModTime(), f.ModTime) {
@@ -149,7 +180,16 @@ func (rt *Transfer) recvGenerator(idx int, f *File) error {
 			}
 			// fallthrough to setPerms and return nil
 		}
-		if err := rt.setPerms(f); err != nil {
+		mode := fs.FileMode(f.Mode)
+		if mode&syscall.S_IWUSR == 0 {
+			// The directory is lacking write permission,
+			// so we need to create it writeable as long as
+			// we are creating files inside that directory.
+			// GenerateFiles will fix permissions afterwards.
+			rt.retouchDirPerms = true
+			mode |= syscall.S_IWUSR
+		}
+		if err := rt.setPerms(f, mode); err != nil {
 			return err
 		}
 		return nil
@@ -164,7 +204,7 @@ func (rt *Transfer) recvGenerator(idx int, f *File) error {
 					rt.Logger.Printf("existing target: %q", target)
 				}
 				if target == f.LinkTarget {
-					if err := rt.setPerms(f); err != nil {
+					if err := rt.setPerms(f, fs.FileMode(f.Mode)); err != nil {
 						return err
 					}
 					return nil // skip
@@ -179,7 +219,7 @@ func (rt *Transfer) recvGenerator(idx int, f *File) error {
 		if err := symlink(rt.DestRoot, f.LinkTarget, f.Name); err != nil {
 			return err
 		}
-		if err := rt.setPerms(f); err != nil {
+		if err := rt.setPerms(f, fs.FileMode(f.Mode)); err != nil {
 			return err
 		}
 		return nil
@@ -248,7 +288,7 @@ func (rt *Transfer) recvGenerator(idx int, f *File) error {
 		if rt.Opts.InfoGTE(rsyncopts.INFO_SKIP, 1) {
 			rt.Logger.Printf("skipping %s", local)
 		}
-		if err := rt.setPerms(f); err != nil {
+		if err := rt.setPerms(f, fs.FileMode(f.Mode)); err != nil {
 			return err
 		}
 		return nil
