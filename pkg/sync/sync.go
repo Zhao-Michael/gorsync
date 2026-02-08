@@ -189,6 +189,24 @@ func (s *Syncer) syncRemoteFirst(client *net.Client, remoteFiles []net.FileInfo,
 		}
 	}
 
+	// 删除本地多余的文件（本地存在但远程不存在的文件）
+	for _, localFile := range localFiles {
+		if localFile.IsDir {
+			continue
+		}
+
+		// 检查远程文件是否存在
+		remoteFile := s.findFile(remoteFiles, localFile.Path)
+		if remoteFile == nil {
+			// 远程文件不存在，删除本地文件
+			localPath := filepath.Join(s.localPath, localFile.Path)
+			if err := os.Remove(localPath); err != nil {
+				return fmt.Errorf("failed to remove file: %v", err)
+			}
+			fmt.Printf("Removed: %s\n", localFile.Path)
+		}
+	}
+
 	return nil
 }
 

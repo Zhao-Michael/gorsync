@@ -12,15 +12,12 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
-	"sync"
 )
 
 // 常量定义
 const (
 	// BlockSize 分块大小，1MB
 	BlockSize int64 = 1024 * 1024
-	// MinParallelSize 最小并行传输大小，1MB
-	MinParallelSize int64 = 1024 * 1024
 )
 
 // makeTempName 创建一个临时文件名
@@ -209,16 +206,9 @@ func (c *Client) GetFile(remotePath, localPath string, offset int64) error {
 	}
 	tempFile.Close()
 
-	// 根据文件大小选择传输方式
-	if resp.File.Size > MinParallelSize {
-		// 使用并行传输
-		fmt.Println("Using parallel transfer")
-		err = c.getFileParallel(remotePath, tempPath, resp.File)
-	} else {
-		// 使用顺序传输
-		fmt.Println("Using sequential transfer")
-		err = c.getFileSequential(remotePath, tempPath, 0) // 总是从偏移量0开始传输，全量覆盖
-	}
+	// 始终使用顺序传输
+	fmt.Println("Using sequential transfer")
+	err = c.getFileSequential(remotePath, tempPath, 0) // 总是从偏移量0开始传输，全量覆盖
 	if err != nil {
 		return err
 	}
@@ -348,169 +338,6 @@ func (c *Client) getFileSequential(remotePath, localPath string, offset int64) e
 
 		if resp.File.MD5 != destMD5 {
 			return fmt.Errorf("file content mismatch: server MD5 %s, local MD5 %s", resp.File.MD5, destMD5)
-		}
-	}
-
-	return nil
-}
-
-// getFileParallel 并行获取文件
-func (c *Client) getFileParallel(remotePath, localPath string, fileInfo *FileInfo) error {
-	// 先创建一个与源文件大小相同的空文件
-	destFile, err := os.Create(localPath)
-	if err != nil {
-		return fmt.Errorf("failed to create destination file: %v", err)
-	}
-
-	// 设置文件大小
-	if err := destFile.Truncate(fileInfo.Size); err != nil {
-		destFile.Close()
-		return fmt.Errorf("failed to truncate destination file: %v", err)
-	}
-	destFile.Close()
-
-	// 计算需要的块数
-	numBlocks := fileInfo.NumBlocks
-	if numBlocks <= 0 {
-		numBlocks = (fileInfo.Size + BlockSize - 1) / BlockSize
-	}
-
-	fmt.Printf("Starting parallel download: %s (total blocks: %d)\n", remotePath, numBlocks)
-
-	var wg sync.WaitGroup
-	errChan := make(chan error, numBlocks)
-
-	// 启动多个goroutine获取文件块
-	for i := int64(0); i < numBlocks; i++ {
-		wg.Add(1)
-		go func(blockIndex int64) {
-			defer wg.Done()
-
-			// 获取文件块
-			if err := c.GetFileBlock(remotePath, localPath, blockIndex); err != nil {
-				errChan <- err
-			}
-		}(i)
-	}
-
-	// 等待所有goroutine完成
-	wg.Wait()
-	close(errChan)
-
-	// 检查是否有错误
-	for err := range errChan {
-		if err != nil {
-			return err
-		}
-	}
-
-	fmt.Printf("Parallel download completed: %s (all %d blocks transferred)\n", remotePath, numBlocks)
-
-	// 确保文件权限正确
-	if err := os.Chmod(localPath, os.FileMode(fileInfo.Mode)); err != nil {
-		return fmt.Errorf("failed to set destination file mode: %v", err)
-	}
-
-	// 计算目标文件的MD5哈希值并与服务器发送的MD5哈希值进行比较
-	if fileInfo.MD5 != "" {
-		destMD5, err := calculateFileMD5(localPath)
-		if err != nil {
-			return fmt.Errorf("failed to calculate destination file MD5: %v", err)
-		}
-
-		if fileInfo.MD5 != destMD5 {
-			return fmt.Errorf("file content mismatch: server MD5 %s, local MD5 %s", fileInfo.MD5, destMD5)
-		}
-	}
-
-	return nil
-}
-
-// GetFileBlock 获取文件块
-func (c *Client) GetFileBlock(remotePath, localPath string, blockIndex int64) error {
-	conn, err := c.connect()
-	if err != nil {
-		return err
-	}
-	defer conn.Close()
-
-	// 发送请求
-	req := Request{
-		Type:       "file",
-		Path:       remotePath,
-		BlockIndex: blockIndex,
-		BlockSize:  BlockSize,
-	}
-	if err := json.NewEncoder(conn).Encode(&req); err != nil {
-		return fmt.Errorf("failed to send request: %v", err)
-	}
-
-	// 接收响应
-	var resp Response
-	if err := json.NewDecoder(conn).Decode(&resp); err != nil {
-		return fmt.Errorf("failed to decode response: %v", err)
-	}
-
-	if resp.Status != "ok" {
-		return fmt.Errorf("server error: %s", resp.Message)
-	}
-
-	if resp.File == nil {
-		return fmt.Errorf("no file info in response")
-	}
-
-	// 打开目标文件
-	destFile, err := os.OpenFile(localPath, os.O_RDWR|os.O_CREATE, os.FileMode(resp.File.Mode))
-	if err != nil {
-		return fmt.Errorf("failed to open destination file: %v", err)
-	}
-	defer destFile.Close()
-
-	// 计算块的偏移量
-	offset := blockIndex * BlockSize
-
-	// 移动文件指针到指定偏移量
-	if _, err := destFile.Seek(offset, io.SeekStart); err != nil {
-		return fmt.Errorf("failed to seek destination file: %v", err)
-	}
-
-	// 接收文件数据
-	buffer := make([]byte, 64*1024)
-	transferred := int64(0)
-	lastProgress := float64(0)
-	blockSize := BlockSize
-	if offset+blockSize > resp.File.Size {
-		blockSize = resp.File.Size - offset
-	}
-	totalSize := blockSize
-
-	for transferred < totalSize {
-		n, err := conn.Read(buffer)
-		if err != nil && err != io.EOF {
-			return fmt.Errorf("failed to read file data: %v", err)
-		}
-
-		if n == 0 {
-			break
-		}
-
-		// 写入目标文件
-		if _, err := destFile.Write(buffer[:n]); err != nil {
-			return fmt.Errorf("failed to write destination file: %v", err)
-		}
-
-		transferred += int64(n)
-
-		// 计算进度并打印
-		progress := float64(transferred) / float64(totalSize) * 100
-		if progress-lastProgress >= 10 {
-			fmt.Printf("Block download progress: %s (block %d) %.1f%%\n", remotePath, blockIndex, progress)
-			lastProgress = progress
-		}
-
-		// 刷新缓冲区
-		if err := destFile.Sync(); err != nil {
-			return fmt.Errorf("failed to sync destination file: %v", err)
 		}
 	}
 
