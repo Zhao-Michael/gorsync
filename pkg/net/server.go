@@ -12,23 +12,19 @@ import (
 
 // FileInfo 文件信息结构体
 type FileInfo struct {
-	Path      string `json:"path"`
-	Size      int64  `json:"size"`
-	ModTime   int64  `json:"modTime"`
-	IsDir     bool   `json:"isDir"`
-	Mode      int    `json:"mode"`
-	MD5       string `json:"md5,omitempty"`
-	BlockSize int64  `json:"blockSize,omitempty"` // 分块大小
-	NumBlocks int64  `json:"numBlocks,omitempty"` // 分块数量
+	Path    string `json:"path"`
+	Size    int64  `json:"size"`
+	ModTime int64  `json:"modTime"`
+	IsDir   bool   `json:"isDir"`
+	Mode    int    `json:"mode"`
+	MD5     string `json:"md5,omitempty"`
 }
 
 // Request 请求结构体
 type Request struct {
-	Type       string `json:"type"` // "list" or "file"
-	Path       string `json:"path"`
-	Offset     int64  `json:"offset"`
-	BlockIndex int64  `json:"blockIndex,omitempty"` // 块索引
-	BlockSize  int64  `json:"blockSize,omitempty"`  // 块大小
+	Type   string `json:"type"` // "list" or "file"
+	Path   string `json:"path"`
+	Offset int64  `json:"offset"`
 }
 
 // Response 响应结构体
@@ -93,7 +89,7 @@ func (s *Server) handleConnection(conn net.Conn) {
 	case "list":
 		s.handleListRequest(conn, req.Path)
 	case "file":
-		s.handleFileRequest(conn, req.Path, req.Offset, req.BlockIndex)
+		s.handleFileRequest(conn, req.Path)
 	default:
 		s.sendError(conn, fmt.Sprintf("Unknown request type: %s", req.Type))
 		fmt.Printf("Unknown request type: %s\n", req.Type)
@@ -166,7 +162,7 @@ func (s *Server) handleListRequest(conn net.Conn, path string) {
 }
 
 // handleFileRequest 处理文件传输请求
-func (s *Server) handleFileRequest(conn net.Conn, path string, offset int64, blockIndex int64) {
+func (s *Server) handleFileRequest(conn net.Conn, path string) {
 	// 确定完整路径
 	var fullPath string
 	if s.rootDir == "" {
@@ -202,19 +198,14 @@ func (s *Server) handleFileRequest(conn net.Conn, path string, offset int64, blo
 		// 继续执行，即使MD5计算失败
 	}
 
-	// 计算分块信息
-	numBlocks := (info.Size() + BlockSize - 1) / BlockSize
-
 	// 发送文件信息
 	fileInfo := &FileInfo{
-		Path:      path,
-		Size:      info.Size(),
-		ModTime:   info.ModTime().Unix(),
-		IsDir:     info.IsDir(),
-		Mode:      int(info.Mode()),
-		MD5:       md5,
-		BlockSize: BlockSize,
-		NumBlocks: numBlocks,
+		Path:    path,
+		Size:    info.Size(),
+		ModTime: info.ModTime().Unix(),
+		IsDir:   info.IsDir(),
+		Mode:    int(info.Mode()),
+		MD5:     md5,
 	}
 
 	resp := Response{
@@ -230,30 +221,17 @@ func (s *Server) handleFileRequest(conn net.Conn, path string, offset int64, blo
 	conn.Write([]byte("\n"))
 
 	// 确定传输的偏移量和大小
-	transferOffset := offset
-	transferSize := info.Size() - offset
-
-	// 如果指定了块索引，计算块的偏移量和大小
-	if blockIndex >= 0 {
-		transferOffset = blockIndex * BlockSize
-		transferSize = BlockSize
-		if transferOffset+transferSize > info.Size() {
-			transferSize = info.Size() - transferOffset
-		}
-	}
+	transferSize := info.Size()
 
 	// 确保文件指针在正确的位置
-	if _, err := file.Seek(transferOffset, io.SeekStart); err != nil {
+	if _, err := file.Seek(0, io.SeekStart); err != nil {
 		fmt.Printf("Failed to seek file: %v\n", err)
 		return
 	}
 
 	// 打印传输开始信息
-	if blockIndex >= 0 {
-		fmt.Printf("Starting block transfer: %s (block %d, offset: %d, size: %d bytes)\n", path, blockIndex, transferOffset, transferSize)
-	} else {
-		fmt.Printf("Starting file transfer: %s (offset: %d, size: %d bytes)\n", path, transferOffset, transferSize)
-	}
+
+	fmt.Printf("Starting transfer: %s (size: %d bytes)\n", path, transferSize)
 
 	// 发送文件数据
 	buffer := make([]byte, 64*1024)
@@ -288,21 +266,13 @@ func (s *Server) handleFileRequest(conn net.Conn, path string, offset int64, blo
 		// 计算进度并打印
 		progress := float64(transferred) / float64(transferSize) * 100
 		if progress-lastProgress >= 10 {
-			if blockIndex >= 0 {
-				fmt.Printf("Block transfer progress: %s (block %d) %.1f%%\n", path, blockIndex, progress)
-			} else {
-				fmt.Printf("File transfer progress: %s %.1f%%\n", path, progress)
-			}
+			fmt.Printf("File transfer progress: %s %.1f%%\n", path, progress)
 			lastProgress = progress
 		}
 	}
 
 	// 打印传输完成信息
-	if blockIndex >= 0 {
-		fmt.Printf("Block transfer completed: %s (block %d, transferred: %d bytes)\n", path, blockIndex, transferred)
-	} else {
-		fmt.Printf("File transfer completed: %s (transferred: %d bytes)\n", path, transferred)
-	}
+	fmt.Printf("File transfer completed: %s (transferred: %d bytes)\n", path, transferred)
 }
 
 // sendError 发送错误响应
