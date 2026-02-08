@@ -158,6 +158,18 @@ func (s *Server) handleListRequest(conn net.Conn, path string) {
 			IsDir:   info.IsDir(),
 			Mode:    int(info.Mode()),
 		}
+
+		// 计算文件的MD5哈希值（仅对文件计算，不对目录）
+		if !info.IsDir() {
+			md5, err := calculateMD5(walkPath)
+			if err != nil {
+				fmt.Printf("Failed to calculate file MD5 for %s: %v\n", walkPath, err)
+				// 继续执行，即使MD5计算失败
+			} else {
+				fileInfo.MD5 = md5
+			}
+		}
+
 		files = append(files, fileInfo)
 
 		return nil
