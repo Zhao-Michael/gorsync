@@ -73,9 +73,12 @@ func (s *Server) Start() error {
 
 // handleConnection 处理客户端连接
 func (s *Server) handleConnection(conn net.Conn) {
-	defer conn.Close()
+	defer func() {
+		fmt.Printf("< Client close: %s\n", conn.RemoteAddr())
+		conn.Close()
+	}()
 
-	fmt.Printf("Client connected: %s\n", conn.RemoteAddr())
+	fmt.Printf("> Client connected: %s\n", conn.RemoteAddr())
 
 	// 读取请求
 	var req Request
