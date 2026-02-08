@@ -6,6 +6,7 @@ import (
 	"io"
 	"os"
 	"path/filepath"
+	"strings"
 
 	"gorsync/pkg/net"
 )
@@ -202,6 +203,7 @@ func (s *Syncer) syncRemoteFirst(client *net.Client, remoteFiles []net.FileInfo,
 
 				// 构建完整的远程路径
 				fullRemotePath := filepath.Join(s.remotePath, remoteFile.Path)
+				fullRemotePath = strings.ReplaceAll(fullRemotePath, "\\", "/")
 				if err := client.GetFile(fullRemotePath, localPath, offset); err != nil {
 					return fmt.Errorf("failed to get file: %v", err)
 				}

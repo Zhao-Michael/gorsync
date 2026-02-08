@@ -1,6 +1,7 @@
 package net
 
 import (
+	"bufio"
 	"crypto/md5"
 	"crypto/rand"
 	"encoding/base32"
@@ -260,9 +261,16 @@ func (c *Client) getFileSequential(remotePath, localPath string, offset int64) e
 		return fmt.Errorf("failed to send request: %v", err)
 	}
 
+	reader := bufio.NewReader(conn)
+	jsonData, err := reader.ReadBytes('\n')
+	ret, err := reader.ReadByte()
+	if err != nil || ret != '\n' {
+		return fmt.Errorf("failed to parse the \\n : %v", err)
+	}
+
 	// 接收响应
 	var resp Response
-	if err := json.NewDecoder(conn).Decode(&resp); err != nil {
+	if err := json.Unmarshal(jsonData, &resp); err != nil {
 		return fmt.Errorf("failed to decode response: %v", err)
 	}
 
@@ -295,7 +303,7 @@ func (c *Client) getFileSequential(remotePath, localPath string, offset int64) e
 	fmt.Printf("Starting sequential download: %s (offset: %d, total size: %d bytes)\n", remotePath, offset, totalSize)
 
 	for transferred < totalSize {
-		n, err := conn.Read(buffer)
+		n, err := reader.Read(buffer)
 		if err != nil && err != io.EOF {
 			return fmt.Errorf("failed to read file data: %v", err)
 		}

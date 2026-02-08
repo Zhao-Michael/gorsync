@@ -232,10 +232,13 @@ func (s *Server) handleFileRequest(conn net.Conn, path string, offset int64, blo
 		Status: "ok",
 		File:   fileInfo,
 	}
+
 	if err := json.NewEncoder(conn).Encode(&resp); err != nil {
 		fmt.Printf("Failed to send response: %v\n", err)
 		return
 	}
+
+	conn.Write([]byte("\n"))
 
 	// 确定传输的偏移量和大小
 	transferOffset := offset
