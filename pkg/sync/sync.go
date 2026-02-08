@@ -196,7 +196,7 @@ func (s *Syncer) syncRemoteFirst(client *net.Client, remoteFiles []net.FileInfo,
 		}
 
 		// 检查远程文件是否存在
-		remoteFile := s.findFile(remoteFiles, localFile.Path)
+		remoteFile := s.findFile(remoteFiles, strings.ReplaceAll(localFile.Path, "\\", "/"))
 		if remoteFile == nil {
 			// 远程文件不存在，删除本地文件
 			localPath := filepath.Join(s.localPath, localFile.Path)
