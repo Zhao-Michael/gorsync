@@ -11,36 +11,22 @@ import (
 	"gorsync/pkg/net"
 )
 
-// SyncMode 同步模式枚举
-type SyncMode string
-
-const (
-	// LocalFirst 本地优先模式
-	LocalFirst SyncMode = "local-first"
-	// RemoteFirst 远程优先模式
-	RemoteFirst SyncMode = "remote-first"
-	// Bidirectional 双向同步模式
-	Bidirectional SyncMode = "bidirectional"
-)
-
 // Syncer 同步器结构体
 type Syncer struct {
 	localPath   string
 	remotePath  string
 	remoteAddr  string
 	port        int
-	syncMode    SyncMode
 	isListening bool
 }
 
 // NewPeerSyncer 创建对等节点模式的同步器
-func NewPeerSyncer(localPath, remoteAddr string, remotePath string, port int, syncMode SyncMode) *Syncer {
+func NewPeerSyncer(localPath, remoteAddr string, remotePath string, port int) *Syncer {
 	return &Syncer{
 		localPath:   localPath,
 		remotePath:  remotePath,
 		remoteAddr:  remoteAddr,
 		port:        port,
-		syncMode:    syncMode,
 		isListening: true,
 	}
 }
@@ -51,7 +37,7 @@ func (s *Syncer) Sync() error {
 	fmt.Printf("Starting sync operation with peer %s:%d\n", s.remoteAddr, s.port)
 	fmt.Printf("Local path: %s\n", s.localPath)
 	fmt.Printf("Remote path: %s\n", s.remotePath)
-	fmt.Printf("Sync mode: %s\n", s.syncMode)
+	fmt.Printf("Sync mode: remote-first\n")
 
 	// 所有同步操作都通过 TCP 进行
 	err := s.syncWithPeer()
@@ -107,19 +93,10 @@ func (s *Syncer) syncWithPeer() error {
 		return fmt.Errorf("failed to list local files: %v", err)
 	}
 
-	// 根据同步模式执行同步
-	fmt.Printf("Executing sync in %s mode...\n", s.syncMode)
+	// 执行 remote-first 模式同步
+	fmt.Printf("Executing sync in remote-first mode...\n")
 	var syncErr error
-	switch s.syncMode {
-	case LocalFirst:
-		syncErr = s.syncLocalFirst(client, remoteFiles, localFiles)
-	case RemoteFirst:
-		syncErr = s.syncRemoteFirst(client, remoteFiles, localFiles)
-	case Bidirectional:
-		syncErr = s.syncBidirectional(client, remoteFiles, localFiles)
-	default:
-		syncErr = fmt.Errorf("unknown sync mode: %s", s.syncMode)
-	}
+	syncErr = s.syncRemoteFirst(client, remoteFiles, localFiles)
 
 	if syncErr == nil {
 		fmt.Printf("Peer sync completed successfully with %s:%d\n", s.remoteAddr, s.port)

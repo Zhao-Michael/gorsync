@@ -17,14 +17,13 @@ func main() {
 	remotePath := flag.String("remote", "", "远程目录路径")
 	port := flag.Int("port", 8730, "服务端口")
 	peerAddr := flag.String("peer", "", "对等节点IP地址")
-	mode := flag.String("mode", "remote-first", "同步模式 (local-first, remote-first, bidirectional)")
 	listen := flag.Bool("listen", false, "仅启动服务器模式，不发起连接")
 
 	// 自定义Usage信息
 	flag.Usage = func() {
 		fmt.Fprintf(os.Stderr, "Usage of gorsync:\n")
-		fmt.Fprintf(os.Stderr, "  Sync mode (all operations use TCP):\n")
-		fmt.Fprintf(os.Stderr, "    gorsync --path <local> --peer <ip> --remote <remote> [--port <port>] [--mode <mode>]")
+		fmt.Fprintf(os.Stderr, "  Sync mode (all operations use TCP, remote-first mode only):\n")
+		fmt.Fprintf(os.Stderr, "    gorsync --path <local> --peer <ip> --remote <remote> [--port <port>]")
 		fmt.Fprintf(os.Stderr, "  Listen mode:\n")
 		fmt.Fprintf(os.Stderr, "    gorsync --listen [--port <port>]")
 		fmt.Fprintf(os.Stderr, "\nOptions:\n")
@@ -64,17 +63,11 @@ func main() {
 			log.Fatalf("Directory does not exist: %s", absPath)
 		}
 
-		// 解析同步模式
-		syncMode := sync.SyncMode(*mode)
-		if syncMode != sync.LocalFirst && syncMode != sync.RemoteFirst && syncMode != sync.Bidirectional {
-			log.Fatalf("Invalid sync mode: %s. Must be one of: local-first, remote-first, bidirectional", *mode)
-		}
-
 		fmt.Printf("Syncing with peer %s:%d\n", *peerAddr, *port)
 		fmt.Printf("Local path: %s\n", absPath)
 		fmt.Printf("Remote path: %s\n", *remotePath)
-		fmt.Printf("Sync mode: %s\n", syncMode)
-		syncer = sync.NewPeerSyncer(absPath, *peerAddr, *remotePath, *port, syncMode)
+		fmt.Printf("Sync mode: remote-first\n")
+		syncer = sync.NewPeerSyncer(absPath, *peerAddr, *remotePath, *port)
 	} else {
 		// 必须指定 --peer 参数
 		flag.Usage()
