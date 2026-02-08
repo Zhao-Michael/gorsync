@@ -181,6 +181,17 @@ func (c *Client) GetFile(remotePath, localPath string, offset int64) error {
 		return fmt.Errorf("no file info in response")
 	}
 
+	// 检查本地文件是否存在且MD5值相同
+	if _, err := os.Stat(localPath); err == nil {
+		// 本地文件存在，计算其MD5值
+		localMD5, err := calculateFileMD5(localPath)
+		if err == nil && resp.File.MD5 != "" && resp.File.MD5 == localMD5 {
+			// MD5值相同，跳过下载
+			fmt.Printf("Skipping download: %s -> %s (MD5 values match)\n", remotePath, localPath)
+			return nil
+		}
+	}
+
 	// 打印传输开始信息
 	fmt.Printf("Starting download: %s -> %s\n", remotePath, localPath)
 	fmt.Printf("File size: %.2f MB\n", float64(resp.File.Size)/1024/1024)
