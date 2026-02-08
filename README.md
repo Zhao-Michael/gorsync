@@ -44,30 +44,31 @@ go run ./cmd/gorsync [arguments]
 
 ```bash
 # Start server with default port 8730
-gorsync --listen
+gorsync -listen
 
 # Start server with custom port
-gorsync --listen --port 9000
+gorsync -listen -port 9000
 ```
 
 ### Sync files (client mode)
 
 ```bash
 # Sync from source to remote destination
-gorsync --path /path/to/source --peer 192.168.1.100:/path/to/destination
+gorsync -path /path/to/source -peer 192.168.1.100 -remote /path/to/destination
 
 # Sync with custom port
-gorsync --path /path/to/source --peer 192.168.1.100:9000:/path/to/destination
+gorsync -path /path/to/source -peer 192.168.1.100:9000 -remote /path/to/destination
 ```
 
 ## Command-line Arguments
 
 | Argument | Description | Default |
 |----------|-------------|---------|
-| `--path` | Source directory path for synchronization | N/A |
-| `--peer` | Remote peer address in format `host:port:/path` or `host:/path` | N/A |
-| `--listen` | Start in listening mode (server) | false |
-| `--port` | Port number for server or client connection | 8730 |
+| `-path` | Local directory path for synchronization | N/A |
+| `-peer` | Remote peer address | N/A |
+| `-listen` | Start in listening mode (server) | false |
+| `-port` | Port number for server or client connection | 8730 |
+| `-remote` | Remote peer directory path for synchronization | N/A |
 
 ## Examples
 
@@ -75,20 +76,20 @@ gorsync --path /path/to/source --peer 192.168.1.100:9000:/path/to/destination
 
 ```bash
 # Server side (listening mode)
-gorsync --listen
+gorsync -listen
 
 # Client side (sync operation)
-gorsync --path ./source --peer 192.168.1.100:/destination
+gorsync -path ./source -peer 192.168.1.100 -remote /destination
 ```
 
 ### Using custom port
 
 ```bash
 # Server side (custom port)
-gorsync --listen --port 9000
+gorsync -listen -port 9000
 
 # Client side (connect to custom port)
-gorsync --path ./source --peer 192.168.1.100:9000:/destination
+gorsync -path ./source -peer 192.168.1.100:9000 -remote /destination
 ```
 
 ## Technical Implementation
