@@ -1,9 +1,9 @@
 package net
 
 import (
-	"crypto/md5"
 	"encoding/json"
 	"fmt"
+	"gorsync/pkg/utils"
 	"io"
 	"net"
 	"os"
@@ -20,29 +20,6 @@ type FileInfo struct {
 	MD5       string `json:"md5,omitempty"`
 	BlockSize int64  `json:"blockSize,omitempty"` // 分块大小
 	NumBlocks int64  `json:"numBlocks,omitempty"` // 分块数量
-}
-
-// calculateMD5 计算文件的MD5哈希值
-func calculateMD5(filePath string) (string, error) {
-	// 打开文件
-	file, err := os.Open(filePath)
-	if err != nil {
-		return "", fmt.Errorf("failed to open file: %v", err)
-	}
-	defer file.Close()
-
-	// 创建MD5哈希对象
-	hash := md5.New()
-
-	// 读取文件内容并计算哈希值
-	if _, err := io.Copy(hash, file); err != nil {
-		return "", fmt.Errorf("failed to read file: %v", err)
-	}
-
-	// 获取哈希值的十六进制表示
-	hashHex := fmt.Sprintf("%x", hash.Sum(nil))
-
-	return hashHex, nil
 }
 
 // Request 请求结构体
@@ -116,7 +93,7 @@ func (s *Server) handleConnection(conn net.Conn) {
 	case "list":
 		s.handleListRequest(conn, req.Path)
 	case "file":
-		s.handleFileRequest(conn, req.Path, req.Offset, req.BlockIndex, req.BlockSize)
+		s.handleFileRequest(conn, req.Path, req.Offset, req.BlockIndex)
 	default:
 		s.sendError(conn, fmt.Sprintf("Unknown request type: %s", req.Type))
 		fmt.Printf("Unknown request type: %s\n", req.Type)
@@ -161,7 +138,7 @@ func (s *Server) handleListRequest(conn net.Conn, path string) {
 
 		// 计算文件的MD5哈希值（仅对文件计算，不对目录）
 		if !info.IsDir() {
-			md5, err := calculateMD5(walkPath)
+			md5, err := utils.CalculateMD5(walkPath)
 			if err != nil {
 				fmt.Printf("Failed to calculate file MD5 for %s: %v\n", walkPath, err)
 				// 继续执行，即使MD5计算失败
@@ -189,7 +166,7 @@ func (s *Server) handleListRequest(conn net.Conn, path string) {
 }
 
 // handleFileRequest 处理文件传输请求
-func (s *Server) handleFileRequest(conn net.Conn, path string, offset int64, blockIndex int64, blockSize int64) {
+func (s *Server) handleFileRequest(conn net.Conn, path string, offset int64, blockIndex int64) {
 	// 确定完整路径
 	var fullPath string
 	if s.rootDir == "" {
@@ -219,7 +196,7 @@ func (s *Server) handleFileRequest(conn net.Conn, path string, offset int64, blo
 	defer file.Close()
 
 	// 计算文件的MD5哈希值
-	md5, err := calculateMD5(fullPath)
+	md5, err := utils.CalculateMD5(fullPath)
 	if err != nil {
 		fmt.Printf("Failed to calculate file MD5: %v\n", err)
 		// 继续执行，即使MD5计算失败

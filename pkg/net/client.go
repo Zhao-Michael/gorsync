@@ -2,7 +2,6 @@ package net
 
 import (
 	"bufio"
-	"crypto/md5"
 	"encoding/json"
 	"fmt"
 	"gorsync/pkg/utils"
@@ -10,6 +9,8 @@ import (
 	"net"
 	"os"
 	"path/filepath"
+	"strconv"
+	"strings"
 )
 
 // 常量定义
@@ -22,29 +23,6 @@ const (
 type Client struct {
 	addr string
 	port int
-}
-
-// calculateFileMD5 计算文件的MD5哈希值
-func calculateFileMD5(filePath string) (string, error) {
-	// 打开文件
-	file, err := os.Open(filePath)
-	if err != nil {
-		return "", fmt.Errorf("failed to open file: %v", err)
-	}
-	defer file.Close()
-
-	// 创建MD5哈希对象
-	hash := md5.New()
-
-	// 读取文件内容并计算哈希值
-	if _, err := io.Copy(hash, file); err != nil {
-		return "", fmt.Errorf("failed to read file: %v", err)
-	}
-
-	// 获取哈希值的十六进制表示
-	hashHex := fmt.Sprintf("%x", hash.Sum(nil))
-
-	return hashHex, nil
 }
 
 // NewClient 创建新的客户端
@@ -89,8 +67,8 @@ func (c *Client) ListFiles(path string) ([]FileInfo, error) {
 	return resp.Files, nil
 }
 
-// GetFile 获取文件，根据MD5值比较文件，如果不同就全量传输覆盖
-func (c *Client) GetFile(remotePath, localPath string, offset int64) error {
+// DownloadFile 获取文件，根据MD5值比较文件，如果不同就全量传输覆盖
+func (c *Client) DownloadFile(remotePath, localPath string, index int) error {
 	// 首先获取文件信息
 	conn, err := c.connect()
 	if err != nil {
@@ -122,20 +100,8 @@ func (c *Client) GetFile(remotePath, localPath string, offset int64) error {
 		return fmt.Errorf("no file info in response")
 	}
 
-	// 检查本地文件是否存在且MD5值相同
-	if _, err := os.Stat(localPath); err == nil {
-		// 本地文件存在，计算其MD5值
-		localMD5, err := calculateFileMD5(localPath)
-		if err == nil && resp.File.MD5 != "" && resp.File.MD5 == localMD5 {
-			// MD5值相同，跳过下载
-			fmt.Printf("Skipping download: %s -> %s (MD5 values match)\n", remotePath, localPath)
-			return nil
-		}
-	}
-
 	// 打印传输开始信息
-	fmt.Printf("Starting download: %s -> %s\n", remotePath, localPath)
-	fmt.Printf("File size: %.2f MB\n", float64(resp.File.Size)/1024/1024)
+	fmt.Printf("%d. Starting download (%.2f MB): %s\n", index, float64(resp.File.Size)/1024/1024, remotePath)
 
 	// 确保目标目录存在
 	destDir := filepath.Dir(localPath)
@@ -159,14 +125,13 @@ func (c *Client) GetFile(remotePath, localPath string, offset int64) error {
 	tempFile.Close()
 
 	// 始终使用顺序传输
-	fmt.Println("Using sequential transfer")
-	err = c.getFileSequential(remotePath, tempPath, 0) // 总是从偏移量0开始传输，全量覆盖
+	err = c.getFileSequential(remotePath, tempPath, 0, index) // 总是从偏移量0开始传输，全量覆盖
 	if err != nil {
 		return err
 	}
 
 	// 计算临时文件的MD5哈希值
-	tempMD5, err := calculateFileMD5(tempPath)
+	tempMD5, err := utils.CalculateMD5(tempPath)
 	if err != nil {
 		return fmt.Errorf("failed to calculate temporary file MD5: %v", err)
 	}
@@ -181,18 +146,19 @@ func (c *Client) GetFile(remotePath, localPath string, offset int64) error {
 		return fmt.Errorf("failed to rename temporary file: %v", err)
 	}
 
-	fmt.Printf("Download completed: %s -> %s\n", remotePath, localPath)
+	fmt.Printf("%d. Download completed: %s\n", index, remotePath)
 	return nil
 }
 
 // getFileSequential 顺序获取文件
-func (c *Client) getFileSequential(remotePath, localPath string, offset int64) error {
+func (c *Client) getFileSequential(remotePath, localPath string, offset int64, index int) error {
 	conn, err := c.connect()
 	if err != nil {
 		return err
 	}
 	defer conn.Close()
 
+	prefix := strings.Repeat(" ", len(strconv.Itoa(index))+2)
 	// 发送请求
 	req := Request{
 		Type:   "file",
@@ -242,7 +208,7 @@ func (c *Client) getFileSequential(remotePath, localPath string, offset int64) e
 	lastProgress := float64(0)
 	totalSize := resp.File.Size
 
-	fmt.Printf("Starting sequential download: %s (offset: %d, total size: %d bytes)\n", remotePath, offset, totalSize)
+	fmt.Printf("%sStarting sequential download: %s (offset: %d, total size: %d bytes)\n", prefix, remotePath, offset, totalSize)
 
 	for transferred < totalSize {
 		n, err := reader.Read(buffer)
@@ -264,7 +230,7 @@ func (c *Client) getFileSequential(remotePath, localPath string, offset int64) e
 		// 计算进度并打印
 		progress := float64(transferred) / float64(totalSize) * 100
 		if progress-lastProgress >= 10 {
-			fmt.Printf("Sequential download progress: %s %.1f%%\n", remotePath, progress)
+			fmt.Printf("%sSequential download progress: %s %.1f%%\n", prefix, remotePath, progress)
 			lastProgress = progress
 		}
 
@@ -274,7 +240,7 @@ func (c *Client) getFileSequential(remotePath, localPath string, offset int64) e
 		}
 	}
 
-	fmt.Printf("Sequential download completed: %s (transferred: %d bytes)\n", remotePath, transferred)
+	fmt.Printf("%sSequential download completed: %s (transferred: %d bytes)\n", prefix, remotePath, transferred)
 
 	// 确保文件权限正确
 	if err := os.Chmod(localPath, os.FileMode(resp.File.Mode)); err != nil {
@@ -283,7 +249,7 @@ func (c *Client) getFileSequential(remotePath, localPath string, offset int64) e
 
 	// 计算目标文件的MD5哈希值并与服务器发送的MD5哈希值进行比较
 	if resp.File.MD5 != "" {
-		destMD5, err := calculateFileMD5(localPath)
+		destMD5, err := utils.CalculateMD5(localPath)
 		if err != nil {
 			return fmt.Errorf("failed to calculate destination file MD5: %v", err)
 		}
