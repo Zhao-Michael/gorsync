@@ -1,15 +1,11 @@
 package transfer
 
 import (
-	"crypto/md5"
-	"crypto/rand"
-	"encoding/base32"
 	"fmt"
 	"gorsync/pkg/diff"
+	"gorsync/pkg/utils"
 	"io"
 	"os"
-	"path/filepath"
-	"strings"
 	"sync"
 )
 
@@ -20,86 +16,6 @@ const (
 	// MinParallelSize 最小并行传输大小，1MB
 	MinParallelSize int64 = 1024 * 1024
 )
-
-// makeTempName 创建一个临时文件名
-func makeTempName(origname, prefix string) (tempname string, err error) {
-	origname = filepath.Clean(origname)
-	if len(origname) == 0 || origname[len(origname)-1] == filepath.Separator {
-		return "", os.ErrInvalid
-	}
-	// Generate 10 random bytes.
-	// This gives 80 bits of entropy, good enough
-	// for making temporary file name unpredictable.
-	var rnd [10]byte
-	if _, err := rand.Read(rnd[:]); err != nil {
-		return "", err
-	}
-	name := prefix + "-" + strings.ToLower(base32.StdEncoding.EncodeToString(rnd[:])) + ".tmp"
-	return filepath.Join(filepath.Dir(origname), name), nil
-}
-
-// saferename 安全地重命名文件
-func saferename(oldname, newname string) error {
-	err := os.Rename(oldname, newname)
-	if err != nil {
-		// If newname exists ("original"), we will try renaming it to a
-		// new temporary name, then renaming oldname to the newname,
-		// and deleting the renamed original. If system crashes between
-		// renaming and deleting, the original file will still be available
-		// under the temporary name, so users can manually recover data.
-		// (No automatic recovery is possible because after crash the
-		// temporary name is not known.)
-		var origtmp string
-		for {
-			origtmp, err = makeTempName(newname, filepath.Base(newname))
-			if err != nil {
-				return err
-			}
-			_, err = os.Stat(origtmp)
-			if err == nil {
-				continue // most likely will never happen
-			}
-			break
-		}
-		err = os.Rename(newname, origtmp)
-		if err != nil {
-			return err
-		}
-		err = os.Rename(oldname, newname)
-		if err != nil {
-			// Rename still fails, try to revert original rename,
-			// ignoring errors.
-			os.Rename(origtmp, newname)
-			return err
-		}
-		// Rename succeeded, now delete original file.
-		os.Remove(origtmp)
-	}
-	return nil
-}
-
-// calculateMD5 计算文件的MD5哈希值
-func calculateMD5(filePath string) (string, error) {
-	// 打开文件
-	file, err := os.Open(filePath)
-	if err != nil {
-		return "", fmt.Errorf("failed to open file: %v", err)
-	}
-	defer file.Close()
-
-	// 创建MD5哈希对象
-	hash := md5.New()
-
-	// 读取文件内容并计算哈希值
-	if _, err := io.Copy(hash, file); err != nil {
-		return "", fmt.Errorf("failed to read file: %v", err)
-	}
-
-	// 获取哈希值的十六进制表示
-	hashHex := fmt.Sprintf("%x", hash.Sum(nil))
-
-	return hashHex, nil
-}
 
 // copyFileBlock 复制文件的一个块
 func copyFileBlock(srcFile, destFile *os.File, offset, size int64) error {
@@ -153,13 +69,13 @@ func copyFileBlock(srcFile, destFile *os.File, offset, size int64) error {
 // CopyFile 复制文件，支持断点续传、并行传输和增量传输
 func CopyFile(source, dest string) error {
 	// 计算源文件的MD5哈希值
-	srcMD5, err := calculateMD5(source)
+	srcMD5, err := utils.CalculateMD5(source)
 	if err != nil {
 		return fmt.Errorf("failed to calculate source file MD5: %v", err)
 	}
 
 	// 创建临时文件路径
-	tempDest := dest + ".tmp"
+	tempDest := utils.MakeTempName(dest)
 
 	// 确保函数结束时清理临时文件
 	defer func() {
@@ -204,7 +120,7 @@ func CopyFile(source, dest string) error {
 	// 如果已传输的字节数大于等于源文件大小，说明文件已经传输完成
 	if transferred >= srcInfo.Size() {
 		// 计算临时文件的MD5哈希值
-		tempMD5, err := calculateMD5(tempDest)
+		tempMD5, err := utils.CalculateMD5(tempDest)
 		if err != nil {
 			return fmt.Errorf("failed to calculate temporary file MD5: %v", err)
 		}
@@ -215,7 +131,7 @@ func CopyFile(source, dest string) error {
 		}
 
 		// 将临时文件重命名为目标文件
-		if err := saferename(tempDest, dest); err != nil {
+		if err := utils.Saferename(tempDest, dest); err != nil {
 			return fmt.Errorf("failed to rename temporary file: %v", err)
 		}
 
@@ -251,7 +167,7 @@ func CopyFile(source, dest string) error {
 	}
 
 	// 计算临时文件的MD5哈希值
-	tempMD5, err := calculateMD5(tempDest)
+	tempMD5, err := utils.CalculateMD5(tempDest)
 	if err != nil {
 		return fmt.Errorf("failed to calculate temporary file MD5: %v", err)
 	}
@@ -262,7 +178,7 @@ func CopyFile(source, dest string) error {
 	}
 
 	// 将临时文件重命名为目标文件
-	if err := saferename(tempDest, dest); err != nil {
+	if err := utils.Saferename(tempDest, dest); err != nil {
 		return fmt.Errorf("failed to rename temporary file: %v", err)
 	}
 
