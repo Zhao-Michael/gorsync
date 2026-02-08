@@ -27,7 +27,7 @@ $clientPort = 8731  # 客户端使用不同的端口号
 $currentDir = Get-Location
 $serverRootPath = Join-Path -Path $currentDir -ChildPath "test_server_root"
 # 客户端连接到服务器的8730端口，而自己的本地服务器使用8731端口
-$clientProcess = Start-Process -FilePath ".\gorsync.exe" -ArgumentList "--path", "test_client_dest", "--peer", "127.0.0.1", "--remote", $serverRootPath, "--port", $serverPort, "--mode", "remote-first" -NoNewWindow -PassThru -Wait
+$clientProcess = Start-Process -FilePath ".\gorsync.exe" -ArgumentList "--path", "test_client_dest", "--peer", "127.0.0.1", "--remote", $serverRootPath, "--port", $serverPort -NoNewWindow -PassThru -Wait
 
 # 等待客户端完成
 Start-Sleep -Seconds 2
