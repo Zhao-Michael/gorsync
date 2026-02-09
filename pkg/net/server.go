@@ -37,8 +37,9 @@ type Response struct {
 
 // Server TCP服务器结构体
 type Server struct {
-	rootDir string
-	port    int
+	rootDir  string
+	port     int
+	listener net.Listener
 }
 
 // NewServer 创建新的服务器
@@ -56,19 +57,40 @@ func (s *Server) Start() error {
 	if err != nil {
 		return fmt.Errorf("failed to listen: %v", err)
 	}
-	defer listener.Close()
+
+	// 保存监听器到结构体中
+	s.listener = listener
 
 	fmt.Printf("Server started on port %d\n", s.port)
 
 	for {
 		conn, err := listener.Accept()
 		if err != nil {
-			fmt.Printf("Failed to accept connection: %v\n", err)
-			continue
+			// 检查是否是因为监听器被关闭导致的错误
+			if netErr, ok := err.(net.Error); ok && netErr.Temporary() {
+				fmt.Printf("Failed to accept connection: %v\n", err)
+				continue
+			}
+			// 监听器被关闭，退出循环
+			fmt.Printf("Server stopped: %v\n", err)
+			break
 		}
 
 		go s.handleConnection(conn)
 	}
+
+	return nil
+}
+
+// Stop 停止服务器
+func (s *Server) Stop() error {
+	if s.listener != nil {
+		fmt.Printf("Stopping server on port %d\n", s.port)
+		err := s.listener.Close()
+		s.listener = nil
+		return err
+	}
+	return nil
 }
 
 // handleConnection 处理客户端连接
@@ -216,7 +238,7 @@ func (s *Server) handleFileRequest(conn net.Conn, path string) {
 		File:   fileInfo,
 	}
 
-	if err := json.NewEncoder(conn).Encode(&resp); err != nil {
+	if err := json.NewEncoder(conn).Encode(resp); err != nil {
 		fmt.Printf("Failed to send response: %v\n", err)
 		return
 	}
@@ -284,7 +306,7 @@ func (s *Server) sendError(conn net.Conn, message string) {
 		Status:  "error",
 		Message: message,
 	}
-	if err := json.NewEncoder(conn).Encode(&resp); err != nil {
+	if err := json.NewEncoder(conn).Encode(resp); err != nil {
 		fmt.Printf("Failed to send error response: %v\n", err)
 	}
 }

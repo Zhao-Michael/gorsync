@@ -1,0 +1,3 @@
+go build -o gorsync.exe ./cmd/gorsync/main.go
+
+go build -buildmode=c-shared -ldflags="-s -w" -o gorsync.dll ./cmd/gorsync/main.go

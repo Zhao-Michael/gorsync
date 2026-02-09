@@ -6,10 +6,15 @@ import (
 	"log"
 	"os"
 	"path/filepath"
+	stdsync "sync"
 
 	"gorsync/pkg/net"
 	"gorsync/pkg/sync"
 )
+
+// #cgo CFLAGS: -I./
+// #include <stdlib.h>
+import "C"
 
 func main() {
 	// 命令行参数解析
@@ -80,4 +85,77 @@ func main() {
 	}
 
 	fmt.Println("Sync completed successfully!")
+}
+
+// 全局变量，用于存储服务器实例
+var (
+	serverInstance *net.Server
+	serverMutex    = &stdsync.Mutex{}
+)
+
+// StartServer 启动服务
+//
+//export StartServer
+func StartServer() C.int {
+	// 检查是否已经有服务器实例在运行
+	serverMutex.Lock()
+	defer serverMutex.Unlock()
+
+	if serverInstance != nil {
+		fmt.Printf("Server already running\n")
+		return 1 // 失败，服务器已在运行
+	}
+
+	// 使用默认的当前目录和 8730 端口
+	rootDir := "."
+	port := 8730
+
+	// 创建并启动服务器
+	serverInstance = net.NewServer(rootDir, port)
+
+	// 在后台启动服务器
+	go func() {
+		if err := serverInstance.Start(); err != nil {
+			fmt.Printf("Failed to start server: %v\n", err)
+			// 清理服务器实例
+			serverMutex.Lock()
+			serverInstance = nil
+			serverMutex.Unlock()
+		}
+	}()
+	return 0 // 成功
+}
+
+// SyncFiles 同步文件
+//
+//export SyncFiles
+func SyncFiles(localPath *C.char, remoteAddr *C.char, remotePath *C.char, port C.int) C.int {
+	// 将 C 字符串转换为 Go 字符串
+	goLocalPath := C.GoString(localPath)
+	goRemoteAddr := C.GoString(remoteAddr)
+	goRemotePath := C.GoString(remotePath)
+	goPort := int(port)
+
+	// 创建同步器并执行同步操作
+	syncer := sync.NewPeerSyncer(goLocalPath, goRemoteAddr, goRemotePath, goPort)
+
+	if err := syncer.Sync(); err != nil {
+		fmt.Printf("Sync failed: %v\n", err)
+		return 1 // 失败
+	}
+
+	return 0 // 成功
+}
+
+// StopServer 停止所有服务器
+//
+//export StopServer
+func StopServer() C.int {
+	// 清理服务器实例
+	serverMutex.Lock()
+	serverInstance.Stop()
+	serverInstance = nil
+	serverMutex.Unlock()
+
+	return 0 // 成功
 }
