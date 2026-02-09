@@ -90,15 +90,15 @@ extern "C" {
 
 // StartServer 启动服务
 //
-extern __declspec(dllexport) int StartServer(void);
+extern int StartServer(void);
 
 // SyncFiles 同步文件
 //
-extern __declspec(dllexport) int SyncFiles(char* localPath, char* remoteAddr, char* remotePath, int port);
+extern int SyncFiles(char* localPath, char* remoteAddr, char* remotePath, int port);
 
 // StopServer 停止所有服务器
 //
-extern __declspec(dllexport) int StopServer(void);
+extern int StopServer(void);
 
 #ifdef __cplusplus
 }
