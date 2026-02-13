@@ -50,13 +50,13 @@ go build -o gorsync -ldflags="-s -w" ./cmd/gorsync/main.go
 ### Use Library
 
 ```c
-// StartServer 启动服务
+// Start Server
 extern int StartServer(void);
 
-// SyncFiles 同步文件
+// Sync Files
 extern int SyncFiles(char* localPath, char* remotePath);
 
-// StopServer 停止所有服务器
+// Stop Server
 extern int StopServer(void);
 ```
 
@@ -87,7 +87,7 @@ gorsync -path /path/to/destination -remote 192.168.1.100:9000:/path/to/source
 | Argument  | Description                                                      | Default |
 | --------- | ---------------------------------------------------------------- | ------- |
 | `-path`   | Local directory path for synchronization                         | N/A     |
-| `-remote` | Remote address in format `host[:port]:path` (e.g., `192.168.1.100:8730:/src` or `192.168.1.100::/src`) | N/A     |
+| `-remote` | Remote address in format `host[:port]:path` (e.g., `192.168.1.100:8730:/src` or `192.168.1.100:/src`) | N/A     |
 | `-listen` | Start in listening mode with optional port number                | 8730    |
 
 ## Examples
