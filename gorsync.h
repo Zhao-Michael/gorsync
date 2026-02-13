@@ -21,7 +21,7 @@ extern const char *_GoStringPtr(_GoString_ s);
 /* Start of preamble from import "C" comments.  */
 
 
-#line 15 "main.go"
+#line 16 "main.go"
 
  #include <stdlib.h>
 
@@ -94,7 +94,7 @@ extern int StartServer(void);
 
 // SyncFiles 同步文件
 //
-extern int SyncFiles(char* localPath, char* remoteAddr, char* remotePath, int port);
+extern int SyncFiles(char* localPath, char* remotePath);
 
 // StopServer 停止所有服务器
 //
