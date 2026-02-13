@@ -40,11 +40,11 @@ go build -ldflags "-s -w" -buildmode=c-shared -o gorsync.so ./cmd/gorsync/main.g
 
 // build executable for windows:
 
-go build -o gorsync.exe ./cmd/gorsync/main.go
+go build -o gorsync.exe -ldflags="-s -w" ./cmd/gorsync/main.go
 
 // build executable for wlinux:
 
-go build -o gorsync ./cmd/gorsync/main.go
+go build -o gorsync -ldflags="-s -w" ./cmd/gorsync/main.go
 ```
 
 ### Use Library
@@ -54,7 +54,7 @@ go build -o gorsync ./cmd/gorsync/main.go
 extern int StartServer(void);
 
 // SyncFiles 同步文件
-extern int SyncFiles(char* localPath, char* remoteAddr, char* remotePath, int port);
+extern int SyncFiles(char* localPath, char* remotePath);
 
 // StopServer 停止所有服务器
 extern int StopServer(void);
@@ -66,30 +66,29 @@ extern int StopServer(void);
 
 ```bash
 # Start server with default port 8730
-gorsync -listen
+gorsync
 
 # Start server with custom port
-gorsync -listen -port 9000
+gorsync -listen 9000
 ```
 
 ### Sync files (client mode)
 
 ```bash
-# Sync from remote source to local destination
-gorsync -path /path/to/destination -peer 192.168.1.100 -remote /path/to/source
+# Sync from remote source to local destination (default port 8730)
+gorsync -path /path/to/destination -remote 192.168.1.100:/path/to/source
 
 # Sync with custom port
-gorsync -path /path/to/destination -peer 192.168.1.100:9000 -remote /path/to/source
+gorsync -path /path/to/destination -remote 192.168.1.100:9000:/path/to/source
 ```
 
 ## Command-line Arguments
 
-| Argument  | Description                                 | Default |
-| --------- | ------------------------------------------- | ------- |
-| `-path`   | Local directory path for synchronization    | N/A     |
-| `-peer`   | Remote peer address                         | N/A     |
-| `-listen` | Start in listening mode (server)            | false   |
-| `-port`   | Port number for server or client connection | 8730    |
+| Argument  | Description                                                      | Default |
+| --------- | ---------------------------------------------------------------- | ------- |
+| `-path`   | Local directory path for synchronization                         | N/A     |
+| `-remote` | Remote address in format `host[:port]:path` (e.g., `192.168.1.100:8730:/src` or `192.168.1.100::/src`) | N/A     |
+| `-listen` | Start in listening mode with optional port number                | 8730    |
 
 ## Examples
 
@@ -97,20 +96,20 @@ gorsync -path /path/to/destination -peer 192.168.1.100:9000 -remote /path/to/sou
 
 ```bash
 # Server side (listening mode)
-gorsync -listen
+gorsync
 
 # Client side (sync operation)
-gorsync -path ./destination -peer 192.168.1.100 -remote /source
+gorsync -path ./destination -remote 192.168.1.100:/source
 ```
 
 ### Using custom port
 
 ```bash
 # Server side (custom port)
-gorsync -listen -port 9000
+gorsync -listen 9000
 
 # Client side (connect to custom port)
-gorsync -path ./destination -peer 192.168.1.100:9000 -remote /source
+gorsync -path ./destination -remote 192.168.1.100:9000:/source
 ```
 
 ## Technical Implementation

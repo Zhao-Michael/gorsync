@@ -78,8 +78,15 @@ func (s *Syncer) syncWithPeer() error {
 		return fmt.Errorf("failed to list remote files: %v", err)
 	}
 
-	// 打印远程文件列表，用于调试
-	fmt.Printf("Remote files: %v\n", remoteFiles)
+	var totalFiles int
+	var totalSize int64
+	for _, f := range remoteFiles {
+		if !f.IsDir {
+			totalFiles++
+			totalSize += f.Size
+		}
+	}
+	fmt.Printf("Remote files: %d files, total size: %s\n", totalFiles, utils.FormatSize(totalSize))
 
 	// 获取本地文件列表
 	fmt.Printf("Getting local files...\n")
@@ -96,7 +103,7 @@ func (s *Syncer) syncWithPeer() error {
 
 	if syncErr == nil {
 		elapsed := time.Since(start)
-		fmt.Printf("Peer sync completed successfully with %s:%d in %ss\n", s.remoteAddr, s.port, elapsed)
+		fmt.Printf("Peer sync completed with %s:%d in %s\n", s.remoteAddr, s.port, elapsed)
 	} else {
 		fmt.Printf("Peer sync failed with %s:%d: %v\n", s.remoteAddr, s.port, syncErr)
 	}
