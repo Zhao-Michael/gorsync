@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"time"
 
 	"gorsync/pkg/net"
 	"gorsync/pkg/utils"
@@ -89,11 +90,13 @@ func (s *Syncer) syncWithPeer() error {
 
 	// 执行 remote-first 模式同步
 	fmt.Printf("Executing sync in remote-first mode...\n")
+	start := time.Now()
 	var syncErr error
 	syncErr = s.syncRemoteFirst(client, remoteFiles, localFiles)
 
 	if syncErr == nil {
-		fmt.Printf("Peer sync completed successfully with %s:%d\n", s.remoteAddr, s.port)
+		elapsed := time.Since(start)
+		fmt.Printf("Peer sync completed successfully with %s:%d in %ss\n", s.remoteAddr, s.port, elapsed)
 	} else {
 		fmt.Printf("Peer sync failed with %s:%d: %v\n", s.remoteAddr, s.port, syncErr)
 	}
