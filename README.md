@@ -42,7 +42,7 @@ go build -ldflags "-s -w" -buildmode=c-shared -o gorsync.so ./cmd/gorsync/main.g
 
 go build -o gorsync.exe -ldflags="-s -w" ./cmd/gorsync/main.go
 
-// build executable for wlinux:
+// build executable for linux:
 
 go build -o gorsync -ldflags="-s -w" ./cmd/gorsync/main.go
 ```
